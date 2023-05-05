@@ -1,7 +1,7 @@
 {
-  "name": "scrypt",
-  "description": "The scrypt crypto library for NodeJS",
-  "version": "6.0.3",
+  "name": "@exound/scrypt.legacy",
+  "description": "The legacy scrypt password hasher for exound.",
+  "version": "0.0.6",
   "license": "zlib",
   "keywords": [
     "scrypt",
@@ -16,22 +16,23 @@
     "hash",
     "verify"
   ],
+  "main": "index.js",
   "author": {
-    "name": "Barry Steyn",
-    "email": "barry.steyn@gmail.com",
-    "url": "http://doctrina.org"
+    "name": "Kaid Wong",
+    "email": "kaid@exound.com",
+    "url": "https://exound.com"
   },
   "engines": {
-    "node": ">= 0.10"
+    "node": ">= 12"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/barrysteyn/node-scrypt.git"
+    "url": "https://github.com/exound/scrypt.legacy.git"
   },
   "devDependencies": {
-    "mocha": "2.2.5",
     "chai": "3.0.0",
-    "chai-as-promised": "^5.1.0"
+    "chai-as-promised": "^5.1.0",
+    "mocha": "^10.2.0"
   },
   "dependencies": {
     "nan": "^2.14.0"
@@ -42,7 +43,7 @@
     }
   ],
   "bugs": {
-    "url": "https://github.com/barrysteyn/node-scrypt/issues"
+    "url": "https://github.com/exound/scrypt.legacy/issues"
   },
   "scripts": {
     "preinstall": "node node-scrypt-preinstall.js",
