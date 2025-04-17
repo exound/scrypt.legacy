@@ -25,6 +25,9 @@ Barry Steyn barry.steyn@gmail.com
 #ifndef _SCRYPTCOMMON_H_
 #define _SCRYPTCOMMON_H_
 
+#include <napi.h> // Include Napi
+#include <cstdint> // Include for uint32_t
+
 namespace NodeScrypt {
 
   //
@@ -35,16 +38,17 @@ namespace NodeScrypt {
     const uint32_t r;
     const uint32_t p;
 
-    Params(const v8::Local<v8::Object> &obj) :
-      N(Nan::To<uint32_t>(Nan::Get(obj, Nan::New("N").ToLocalChecked()).ToLocalChecked()).ToChecked()),
-      r(Nan::To<uint32_t>(Nan::Get(obj, Nan::New("r").ToLocalChecked()).ToLocalChecked()).ToChecked()),
-      p(Nan::To<uint32_t>(Nan::Get(obj, Nan::New("p").ToLocalChecked()).ToLocalChecked()).ToChecked()) {}
+    // Constructor using Napi::Object
+    Params(Napi::Object obj) :
+      N(obj.Get("N").As<Napi::Number>().Uint32Value()),
+      r(obj.Get("r").As<Napi::Number>().Uint32Value()),
+      p(obj.Get("p").As<Napi::Number>().Uint32Value()) {}
   };
 
   //
-  // Create a Scrypt error
+  // Create a Scrypt error (already refactored in scrypt_common.cc, update signature here)
   //
-  v8::Local<v8::Value> ScryptError(const unsigned int error);
+  Napi::Error ScryptError(Napi::Env env, const unsigned int error);
 };
 
 #endif /* _SCRYPTCOMMON_H_ */

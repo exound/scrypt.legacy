@@ -1,17 +1,22 @@
-#include <nan.h>
-#include <node.h>
+#include <napi.h> // Replace nan.h and node.h
+#include "scrypt_common.h" // For ScryptError
 
-#include "scrypt_common.h"
-
-//Scrypt is a C library and there needs c linkings
+// Scrypt is a C library and there needs c linkings
 extern "C" {
   #include "pickparams.h"
 }
 
-using namespace v8;
+// Synchronous access to scrypt params using Napi
+Napi::Value paramsSync(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env); // Napi HandleScope
 
-//Synchronous access to scrypt params
-NAN_METHOD(paramsSync) {
+  // Basic argument validation
+  if (info.Length() < 4 || !info[0].IsNumber() || !info[1].IsNumber() || !info[2].IsNumber() || !info[3].IsNumber()) {
+      Napi::TypeError::New(env, "Expected 4 numeric arguments: maxtime, maxmemfrac, maxmem, osfreemem").ThrowAsJavaScriptException();
+      return env.Undefined();
+  }
+
   //
   // Variable Declaration
   //
@@ -20,12 +25,14 @@ NAN_METHOD(paramsSync) {
   uint32_t p = 0;
 
   //
-  // Arguments from JavaScript
+  // Arguments from JavaScript using Napi
   //
-  const double maxtime = Nan::To<double>(info[0]).ToChecked();
-  const size_t maxmem = Nan::To<int64_t>(info[2]).ToChecked();
-  const double maxmemfrac = Nan::To<double>(info[1]).ToChecked();
-  const size_t osfreemem = Nan::To<int64_t>(info[3]).ToChecked();
+  const double maxtime = info[0].As<Napi::Number>().DoubleValue();
+  const double maxmemfrac = info[1].As<Napi::Number>().DoubleValue();
+  // Use Int64Value for size_t, assuming it fits within Node.js limits
+  const size_t maxmem = info[2].As<Napi::Number>().Int64Value();
+  const size_t osfreemem = info[3].As<Napi::Number>().Int64Value();
+
 
   //
   // Scrypt: calculate input parameters
@@ -33,19 +40,21 @@ NAN_METHOD(paramsSync) {
   const unsigned int result = pickparams(&logN, &r, &p, maxtime, maxmem, maxmemfrac, osfreemem);
 
   //
-  // Error handling
+  // Error handling using Napi
   //
   if (result) {
-    Nan::ThrowError(NodeScrypt::ScryptError(result));
+    // Use the ScryptError function (already refactored) from scrypt_common.cc
+    NodeScrypt::ScryptError(env, result).ThrowAsJavaScriptException();
+    return env.Undefined(); // Return undefined on error
   }
 
   //
-  // Return values in JSON object
+  // Return values in JSON object using Napi
   //
-  Local <Object> obj = Nan::New<Object>();
-  Nan::Set(obj, Nan::New("N").ToLocalChecked(), Nan::New<Integer>(logN));
-  Nan::Set(obj, Nan::New("r").ToLocalChecked(), Nan::New<Integer>(r));
-  Nan::Set(obj, Nan::New("p").ToLocalChecked(), Nan::New<Integer>(p));
+  Napi::Object obj = Napi::Object::New(env);
+  obj.Set(Napi::String::New(env, "N"), Napi::Number::New(env, logN));
+  obj.Set(Napi::String::New(env, "r"), Napi::Number::New(env, r));
+  obj.Set(Napi::String::New(env, "p"), Napi::Number::New(env, p));
 
-  info.GetReturnValue().Set(obj);
+  return obj; // Return the result object
 }

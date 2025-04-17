@@ -1,38 +1,20 @@
-#include <nan.h>
-#include <node.h>
+#include "scrypt_params_async.h" // Includes napi.h and pickparams.h transitively
 
-#include "scrypt_params_async.h"
+// Asynchronous access to scrypt params using Napi
+Napi::Value params(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
 
-//Scrypt is a C library and there needs c linkings
-extern "C" {
-  #include "pickparams.h"
-}
+  // Basic argument validation (ensure callback is a function)
+  if (info.Length() < 5 || !info[4].IsFunction()) {
+    Napi::TypeError::New(env, "Callback function expected as fifth argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  // TODO: Add more robust validation for other arguments (types, ranges) if needed
 
-using namespace v8;
+  // Create and queue the worker
+  ScryptParamsAsyncWorker* worker = new ScryptParamsAsyncWorker(info);
+  worker->Queue();
 
-void ScryptParamsAsyncWorker::Execute() {
-  // Scrypt: calculate input parameters
-  result = pickparams(&logN, &r, &p, maxtime, maxmem, maxmemfrac, osfreemem);
-}
-
-void ScryptParamsAsyncWorker::HandleOKCallback() {
-  Nan::HandleScope scope;
-
-  // Returned params in JSON object
-  Local <Object> obj = Nan::New<Object>();
-  Nan::Set(obj, Nan::New("N").ToLocalChecked(), Nan::New<Integer>(logN));
-  Nan::Set(obj, Nan::New("r").ToLocalChecked(), Nan::New<Integer>(r));
-  Nan::Set(obj, Nan::New("p").ToLocalChecked(), Nan::New<Integer>(p));
-
-  Local<Value> argv[] = {
-    Nan::Null(),
-    obj
-  };
-
-  callback->Call(2, argv, async_resource);
-}
-
-// Asynchronous access to scrypt params
-NAN_METHOD(params) {
-  Nan::AsyncQueueWorker(new ScryptParamsAsyncWorker(info));
+  // Return undefined, the result is passed asynchronously via the callback
+  return env.Undefined();
 }

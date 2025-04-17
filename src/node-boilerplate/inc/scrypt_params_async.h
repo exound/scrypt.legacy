@@ -25,25 +25,66 @@ Barry Steyn barry.steyn@gmail.com
 #ifndef _SCRYPT_PARAMS_ASYNC_H
 #define _SCRYPT_PARAMS_ASYNC_H
 
-#include "scrypt_async.h"
+#include <napi.h> // Replace scrypt_async.h and nan includes implicitly
+#include <string> // For std::to_string in error handling
 
-// Async class
-class ScryptParamsAsyncWorker : public ScryptAsyncWorker {
+// Scrypt is a C library and there needs c linkings
+extern "C" {
+  #include "pickparams.h" // Keep C library include
+}
+
+// Async class derived from Napi::AsyncWorker
+class ScryptParamsAsyncWorker : public Napi::AsyncWorker {
   public:
-    ScryptParamsAsyncWorker(Nan::NAN_METHOD_ARGS_TYPE info) :
-      ScryptAsyncWorker(new Nan::Callback(info[4].As<v8::Function>())),
-      maxtime(Nan::To<double>(info[0]).ToChecked()),
-      maxmemfrac(Nan::To<double>(info[1]).ToChecked()),
-      maxmem(Nan::To<int64_t>(info[2]).ToChecked()),
-      osfreemem(Nan::To<int64_t>(info[3]).ToChecked())
+    ScryptParamsAsyncWorker(const Napi::CallbackInfo& info) :
+      Napi::AsyncWorker(info[4].As<Napi::Function>()), // Pass callback directly
+      maxtime(info[0].As<Napi::Number>().DoubleValue()),
+      maxmemfrac(info[1].As<Napi::Number>().DoubleValue()),
+      maxmem(info[2].As<Napi::Number>().Int64Value()), // Assuming size_t fits int64_t for Node.js limits
+      osfreemem(info[3].As<Napi::Number>().Int64Value()) // Assuming size_t fits int64_t
     {
       logN = 0;
       r = 0;
       p = 0;
-    };
+      result = 0; // Initialize result
+    }
 
-    void Execute();
-    void HandleOKCallback();
+    ~ScryptParamsAsyncWorker() {} // Destructor needed for Napi::AsyncWorker
+
+    // This method is executed in a separate thread.
+    void Execute() override {
+      // Scrypt: calculate input parameters
+      result = pickparams(&logN, &r, &p, maxtime, maxmem, maxmemfrac, osfreemem);
+      // Check for errors from pickparams if necessary
+      if (result != 0) {
+         // SetError can be used to signal failure to OnError
+         SetError("Scrypt pickparams failed with error code: " + std::to_string(result));
+      }
+    }
+
+    // This method is executed in the main thread after Execute() completes.
+    void OnOK() override {
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // Returned params in JSON object
+      Napi::Object obj = Napi::Object::New(env);
+      obj.Set(Napi::String::New(env, "N"), Napi::Number::New(env, logN));
+      obj.Set(Napi::String::New(env, "r"), Napi::Number::New(env, r));
+      obj.Set(Napi::String::New(env, "p"), Napi::Number::New(env, p));
+
+      // Call the JS callback with null error and the result object
+      Callback().Call({env.Null(), obj});
+    }
+
+    // Optional: Handle errors if Execute fails
+    void OnError(const Napi::Error& e) override {
+        Napi::Env env = Env();
+        Napi::HandleScope scope(env);
+        // Call the JS callback with the error object
+        Callback().Call({e.Value(), env.Undefined()});
+    }
+
 
   private:
     const double maxtime;
@@ -54,6 +95,7 @@ class ScryptParamsAsyncWorker : public ScryptAsyncWorker {
     int logN;
     uint32_t r;
     uint32_t p;
+    int result; // Store result from pickparams
 };
 
 #endif /* _SCRYPT_PARAMS_ASYNC_H */

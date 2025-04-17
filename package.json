@@ -1,7 +1,7 @@
 {
   "name": "@exound/scrypt.legacy",
   "description": "The legacy scrypt password hasher for exound.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "zlib",
   "keywords": [
     "scrypt",
@@ -16,26 +16,31 @@
     "hash",
     "verify"
   ],
-  "main": "index.js",
+  "main": "index.ts",
   "author": {
     "name": "Kaid Wong",
     "email": "kaid@exound.com",
     "url": "https://exound.com"
   },
   "engines": {
-    "node": ">= 12"
+    "node": ">= 22"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/exound/scrypt.legacy.git"
   },
   "devDependencies": {
-    "chai": "3.0.0",
-    "chai-as-promised": "^5.1.0",
-    "mocha": "^10.2.0"
+    "chai": "5.2.0",
+    "chai-as-promised": "^8.0.1",
+    "mocha": "^11.1.0",
+    "typescript": "^5.8.3",
+    "@types/mocha": "^10.0.10",
+    "@types/chai": "^5.2.1",
+    "@types/chai-as-promised": "^8.0.2",
+    "tsx": "4.19.3"
   },
   "dependencies": {
-    "nan": "^2.14.0"
+    "node-addon-api": "^8.3.1"
   },
   "licenses": [
     {
@@ -46,8 +51,7 @@
     "url": "https://github.com/exound/scrypt.legacy/issues"
   },
   "scripts": {
-    "preinstall": "node node-scrypt-preinstall.js",
     "install": "node-gyp rebuild",
-    "test": "mocha tests/scrypt-tests.js"
+    "test": "mocha -r tsx tests/**/*.ts"
   }
 }

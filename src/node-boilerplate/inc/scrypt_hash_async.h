@@ -25,39 +25,100 @@ Barry Steyn barry.steyn@gmail.com
 #ifndef _SCRYPTHASHASYNC_
 #define _SCRYPTHASHASYNC_
 
-#include "scrypt_async.h"
+#include <napi.h>
+#include <vector>
+#include <string> // For error messages
+#include "scrypt_common.h" // For Params struct and ScryptError
 
-class ScryptHashAsyncWorker : public ScryptAsyncWorker {
+// Scrypt is a C library and there needs c linkings
+extern "C" {
+  #include "hash.h" // For Hash function (assuming it's in hash.h)
+}
+
+class ScryptHashAsyncWorker : public Napi::AsyncWorker {
   public:
-    ScryptHashAsyncWorker(Nan::NAN_METHOD_ARGS_TYPE info) :
-      ScryptAsyncWorker(new Nan::Callback(info[4].As<v8::Function>())),
-      key_ptr(reinterpret_cast<uint8_t*>(node::Buffer::Data(info[0]))),
-      key_size(node::Buffer::Length(info[0])),
-      params(Nan::To<v8::Object>(info[1]).ToLocalChecked()),
-      hash_size(Nan::To<int64_t>(info[2]).ToChecked()),
-      salt_ptr(reinterpret_cast<uint8_t*>(node::Buffer::Data(info[3]))),
-      salt_size(static_cast<size_t>(node::Buffer::Length(info[3])))
+    ScryptHashAsyncWorker(const Napi::CallbackInfo& info) :
+      Napi::AsyncWorker(info[4].As<Napi::Function>()), // Callback is the 5th argument
+      params(info[1].As<Napi::Object>()), // Params object is the 2nd argument
+      hash_size(info[2].As<Napi::Number>().Int64Value()) // Hash size is the 3rd argument
     {
-      ScryptPeristentObject = Nan::New<v8::Object>();
-      Nan::Set(ScryptPeristentObject, Nan::New("KeyBuffer").ToLocalChecked(), info[0]);
-      Nan::Set(ScryptPeristentObject, Nan::New("HashBuffer").ToLocalChecked(), Nan::NewBuffer(static_cast<uint32_t>(hash_size)).ToLocalChecked());
-      Nan::Set(ScryptPeristentObject, Nan::New("SaltBuffer").ToLocalChecked(), info[3]);
-      SaveToPersistent("ScryptPeristentObject", ScryptPeristentObject);
+      // Get key buffer (1st argument)
+      Napi::Buffer<uint8_t> key_buffer = info[0].As<Napi::Buffer<uint8_t>>();
+      key_ref = Napi::Reference<Napi::Buffer<uint8_t>>::New(key_buffer, 1); // Keep buffer alive
+      key_ptr = key_buffer.Data();
+      key_size = key_buffer.Length();
 
-      hash_ptr = reinterpret_cast<uint8_t*>(node::Buffer::Data(Nan::Get(ScryptPeristentObject, Nan::New("HashBuffer").ToLocalChecked()).ToLocalChecked()));
-    };
+      // Get salt buffer (4th argument)
+      Napi::Buffer<uint8_t> salt_buffer = info[3].As<Napi::Buffer<uint8_t>>();
+      salt_ref = Napi::Reference<Napi::Buffer<uint8_t>>::New(salt_buffer, 1); // Keep buffer alive
+      salt_ptr = salt_buffer.Data();
+      salt_size = salt_buffer.Length();
 
-    void Execute();
-    void HandleOKCallback();
+      // Allocate space for the hash result
+      result_data.resize(hash_size);
+
+      hash_result = 0; // Initialize result code
+    }
+
+    ~ScryptHashAsyncWorker() {} // Destructor
+
+    // Executed in background thread
+    void Execute() override {
+      // Call the core scrypt Hash function
+      // Assuming signature: Hash(key_ptr, key_size, params.N, params.r, params.p, salt_ptr, salt_size, result_data.data(), hash_size)
+      hash_result = Hash(
+          key_ptr, key_size,
+          salt_ptr, salt_size,
+          params.N, params.r, params.p,
+          result_data.data(), hash_size
+      );
+
+      if (hash_result != 0) {
+        // Use the common error function description
+        SetError("Scrypt Hash failed: " + std::string(NodeScrypt::ScryptError(Env(), hash_result).Message()));
+      }
+    }
+
+    // Executed in main thread after successful Execute
+    void OnOK() override {
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // Create a new buffer with the hash result
+      Napi::Buffer<uint8_t> result_buffer = Napi::Buffer<uint8_t>::Copy(env, result_data.data(), hash_size);
+
+      // Call the JS callback with null error and the result buffer
+      Callback().Call({env.Null(), result_buffer});
+
+      // Release references
+      key_ref.Reset();
+      salt_ref.Reset();
+    }
+
+    // Executed in main thread if Execute sets an error
+    void OnError(const Napi::Error& e) override {
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // Call the JS callback with the error
+      Callback().Call({e.Value(), env.Undefined()});
+
+      // Release references
+      key_ref.Reset();
+      salt_ref.Reset();
+    }
 
   private:
+    Napi::Reference<Napi::Buffer<uint8_t>> key_ref;
+    Napi::Reference<Napi::Buffer<uint8_t>> salt_ref;
     const uint8_t* key_ptr;
-    const size_t key_size;
+    size_t key_size;
     const NodeScrypt::Params params;
     const size_t hash_size;
     const uint8_t* salt_ptr;
-    const size_t salt_size;
-    uint8_t* hash_ptr;
+    size_t salt_size;
+    std::vector<uint8_t> result_data;
+    int hash_result; // Store result from Hash
 };
 
 #endif /* _SCRYPTHASHASYNC_ */
