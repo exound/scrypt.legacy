@@ -35,7 +35,7 @@
     "mocha": "^10.2.0"
   },
   "dependencies": {
-    "nan": "^2.14.0"
+    "node-addon-api": "^7.1.0"
   },
   "licenses": [
     {

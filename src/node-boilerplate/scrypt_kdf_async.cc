@@ -1,34 +1,35 @@
-#include <nan.h>
-#include <node.h>
+#include "scrypt_kdf_async.h" // Includes napi.h, scrypt_common.h, keyderivation.h
 
-#include "scrypt_kdf_async.h"
+// Asynchronous KDF function using Napi
+Napi::Value kdf(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
 
-//Scrypt is a C library and there needs c linkings
-extern "C" {
-	#include "keyderivation.h"
-}
+  // Argument validation
+  if (info.Length() < 4) {
+    Napi::TypeError::New(env, "Expected 4 arguments: keyBuffer, paramsObject, saltBuffer, callback").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 1 must be a buffer (key)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+   if (!info[1].IsObject()) {
+    Napi::TypeError::New(env, "Argument 2 must be an object (params)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[2].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 3 must be a buffer (salt)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[3].IsFunction()) {
+    Napi::TypeError::New(env, "Argument 4 must be a function (callback)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
-using namespace v8;
+  // Create and queue the worker
+  ScryptKDFAsyncWorker* worker = new ScryptKDFAsyncWorker(info);
+  worker->Queue();
 
-void ScryptKDFAsyncWorker::Execute() {
-    //
-    // Scrypt key derivation function
-    //
-    result = KDF(key_ptr, key_size, KDFResult_ptr, params.N, params.r, params.p, salt_ptr);
-}
-
-void ScryptKDFAsyncWorker::HandleOKCallback() {
-    Nan::HandleScope scope;
-
-    Local<Value> argv[] = {
-        Nan::Null(),
-        Nan::Get(Nan::To<v8::Object>(GetFromPersistent("ScryptPeristentObject")).ToLocalChecked(), Nan::New("KDFResult").ToLocalChecked()).ToLocalChecked()
-    };
-
-    callback->Call(2, argv, async_resource);
-}
-
-// Asynchronous access to scrypt params
-NAN_METHOD(kdf) {
-    Nan::AsyncQueueWorker(new ScryptKDFAsyncWorker(info));
+  // Return undefined, result is handled by the callback
+  return env.Undefined();
 }

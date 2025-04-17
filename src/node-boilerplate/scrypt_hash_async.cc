@@ -22,39 +22,42 @@ freely, subject to the following restrictions:
 Barry Steyn barry.steyn@gmail.com
 */
 
-#include <nan.h>
-#include <node.h>
+#include "scrypt_hash_async.h" // Includes napi.h, scrypt_common.h, hash.h
 
-#include "scrypt_hash_async.h"
+// Asynchronous Hash function using Napi
+Napi::Value hash(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
 
-//C linkings needed for Scrypt
-extern "C" {
-  #include "hash.h"
-}
+  // Argument validation
+  if (info.Length() < 5) {
+    Napi::TypeError::New(env, "Expected 5 arguments: keyBuffer, paramsObject, hashSize, saltBuffer, callback").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 1 must be a buffer (key)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+   if (!info[1].IsObject()) {
+    Napi::TypeError::New(env, "Argument 2 must be an object (params)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+   if (!info[2].IsNumber()) {
+    Napi::TypeError::New(env, "Argument 3 must be a number (hashSize)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[3].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 4 must be a buffer (salt)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[4].IsFunction()) {
+    Napi::TypeError::New(env, "Argument 5 must be a function (callback)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
-using namespace v8;
+  // Create and queue the worker
+  ScryptHashAsyncWorker* worker = new ScryptHashAsyncWorker(info);
+  worker->Queue();
 
-//
-// Scrypt Hash Function
-//
-void ScryptHashAsyncWorker::Execute() {
-  result = Hash(key_ptr, key_size, salt_ptr, salt_size, params.N, params.r, params.p, hash_ptr, hash_size);
-}
-
-void ScryptHashAsyncWorker::HandleOKCallback() {
-  Nan::HandleScope scope;
-
-  Local<Value> argv[] = {
-    Nan::Null(),
-    Nan::Get(Nan::To<v8::Object>(GetFromPersistent("ScryptPeristentObject")).ToLocalChecked(), Nan::New("HashBuffer").ToLocalChecked()).ToLocalChecked()
-  };
-
-  callback->Call(2, argv, async_resource);
-}
-
-//
-// Asynchronous Scrypt Params
-//
-NAN_METHOD(hash) {
-  Nan::AsyncQueueWorker(new ScryptHashAsyncWorker(info));
+  // Return undefined, result is handled by the callback
+  return env.Undefined();
 }

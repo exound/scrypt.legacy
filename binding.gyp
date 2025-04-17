@@ -119,13 +119,19 @@
         'scrypt_node.cc'
       ],
       'include_dirs': [
-        '<!(node -e "require(\'nan\')")',
+        "<!@(node -p \"require('node-addon-api').include\")",
+        "<!(node -p \"require('node-addon-api').include_dir\")",
         'src/util',
         'src/scryptwrapper/inc',
-        'src/node-boilerplate/inc'
+        'src/node-boilerplate/inc',
+        'scrypt/scrypt-1.2.0/lib/crypto',
+      ],
+      'defines': [
+        'NAPI_VERSION=6',
+        'NAPI_DISABLE_CPP_EXCEPTIONS'
       ],
       'cflags': ['<@(compiler-flags)'],
-      'dependencies': ['scrypt_wrapper','scrypt_lib'],
+      'dependencies': ['scrypt_wrapper', 'scrypt_lib', "<!(node -p \"require('node-addon-api').gyp\")"],
     }
   ],
 }

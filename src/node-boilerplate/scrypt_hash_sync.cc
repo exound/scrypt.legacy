@@ -1,48 +1,72 @@
-#include <nan.h>
-#include <node.h>
+#include <napi.h> // Replace nan.h and node.h
+#include "scrypt_common.h" // For Params struct and ScryptError
 
-#include "scrypt_common.h"
-
-//
 // Scrypt is a C library and there needs c linkings
-//
 extern "C" {
-  #include "hash.h"
+  #include "hash.h" // For Hash function
 }
 
-using namespace v8;
+// Synchronous Hash function using Napi
+Napi::Value hashSync(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-//
-// Synchronous Scrypt params
-//
-NAN_METHOD(hashSync) {
-  //
-  // Arguments from JavaScript
-  //
-  const uint8_t* key_ptr = reinterpret_cast<uint8_t*>(node::Buffer::Data(info[0]));
-  const size_t key_size = node::Buffer::Length(info[0]);
-  const NodeScrypt::Params params = Nan::To<v8::Object>(info[1]).ToLocalChecked();
-  const size_t hash_size = Nan::To<int64_t>(info[2]).ToChecked();
-  const uint8_t* salt_ptr = reinterpret_cast<uint8_t*>(node::Buffer::Data(info[3]));
-  const size_t salt_size = node::Buffer::Length(info[3]);
+  // Argument validation
+  if (info.Length() < 4) {
+    Napi::TypeError::New(env, "Expected 4 arguments: keyBuffer, paramsObject, hashSize, saltBuffer").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 1 must be a buffer (key)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[1].IsObject()) {
+    Napi::TypeError::New(env, "Argument 2 must be an object (params)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[2].IsNumber()) {
+    Napi::TypeError::New(env, "Argument 3 must be a number (hashSize)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (!info[3].IsBuffer()) {
+    Napi::TypeError::New(env, "Argument 4 must be a buffer (salt)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   //
-  // Variable Declaration
+  // Arguments from JavaScript using Napi
   //
-  Local<Value> hash_result = Nan::NewBuffer(static_cast<uint32_t>(hash_size)).ToLocalChecked();
-  uint8_t* hash_ptr = reinterpret_cast<uint8_t*>(node::Buffer::Data(hash_result));
+  Napi::Buffer<uint8_t> key_buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  const uint8_t* key_ptr = key_buffer.Data();
+  const size_t key_size = key_buffer.Length();
+
+  const NodeScrypt::Params params(info[1].As<Napi::Object>());
+
+  const size_t hash_size = info[2].As<Napi::Number>().Int64Value();
+
+  Napi::Buffer<uint8_t> salt_buffer = info[3].As<Napi::Buffer<uint8_t>>();
+  const uint8_t* salt_ptr = salt_buffer.Data();
+  const size_t salt_size = salt_buffer.Length();
 
   //
-  // Scrypt key derivation function
+  // Create result buffer using Napi
+  //
+  Napi::Buffer<uint8_t> hash_result_buffer = Napi::Buffer<uint8_t>::New(env, hash_size);
+  uint8_t* hash_ptr = hash_result_buffer.Data();
+
+  //
+  // Scrypt hash function
+  // Assuming signature: Hash(key_ptr, key_size, salt_ptr, salt_size, params.N, params.r, params.p, hash_ptr, hash_size)
   //
   const unsigned int result = Hash(key_ptr, key_size, salt_ptr, salt_size, params.N, params.r, params.p, hash_ptr, hash_size);
 
   //
-  // Error handling
+  // Error handling using Napi
   //
   if (result) {
-    Nan::ThrowError(NodeScrypt::ScryptError(result));
+    NodeScrypt::ScryptError(env, result).ThrowAsJavaScriptException();
+    return env.Undefined(); // Return undefined on error
   }
 
-  info.GetReturnValue().Set(hash_result);
+  return hash_result_buffer; // Return the result buffer
 }
